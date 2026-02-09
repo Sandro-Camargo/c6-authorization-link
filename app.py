@@ -18,6 +18,7 @@ with st.form("form_autorizacao"):
     nascimento = st.date_input(
     "Data de nascimento",
     format="DD/MM/YYYY",
+    min_value=date(1900, 1, 1),
     max_value=date.today()
 )
     telefone = st.text_input("Telefone (opcional)")
