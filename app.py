@@ -4,9 +4,12 @@ from datetime import date
 import os
 
 # Streamlit Cloud: ler via st.secrets (com fallback local via env)
-C6_USERNAME = st.secrets.get("04709025070_004926") or os.getenv("04709025070_004926")
-C6_PASSWORD = st.secrets.get("Now@103681") or os.getenv("Now@103681")
-
+try:
+    C6_USERNAME = st.secrets["C6_USERNAME"]
+    C6_PASSWORD = st.secrets["C6_PASSWORD"]
+except Exception:
+    C6_USERNAME = os.getenv("C6_USERNAME")
+    C6_PASSWORD = os.getenv("C6_PASSWORD")
 
 st.set_page_config(page_title="C6 • Link de Autorização", layout="centered")
 st.title("🔐 Gerar Link de Autorização C6")
