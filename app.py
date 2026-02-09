@@ -3,11 +3,10 @@ import requests
 from datetime import date
 import os
 
-# =============================
-# CONFIGURAÇÃO – CREDENCIAIS
-# =============================
-C6_USERNAME = os.getenv("04709025070_004926")
-C6_PASSWORD = os.getenv("Now@103681")
+# Streamlit Cloud: ler via st.secrets (com fallback local via env)
+C6_USERNAME = st.secrets.get("04709025070_004926") or os.getenv("04709025070_004926")
+C6_PASSWORD = st.secrets.get("Now@103681") or os.getenv("Now@103681")
+
 
 st.set_page_config(page_title="C6 • Link de Autorização", layout="centered")
 st.title("🔐 Gerar Link de Autorização C6")
