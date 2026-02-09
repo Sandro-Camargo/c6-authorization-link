@@ -46,8 +46,10 @@ if submit:
                 timeout=30
             )
 
-            if token_res.status_code != 200:
-                st.error("Erro ao autenticar na API C6")
+           if token_res.status_code != 200:
+    		st.error(f"Erro ao autenticar na API C6 (HTTP {token_res.status_code})")
+    		st.code(token_res.text, language="json")
+    		st.stop()
             else:
                 token = token_res.json().get("access_token")
 
