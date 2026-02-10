@@ -8,15 +8,18 @@ import streamlit as st
 # =============================
 # CONFIGURAÇÃO DA PÁGINA
 # =============================
-st.set_page_config(page_title="C6 • Link de Autorização", layout="centered")
+st.set_page_config(
+    page_title="C6 • Link de Autorização",
+    layout="centered"
+)
+
 st.title("🔐 Gerar Link de Autorização C6")
 
 
 # =============================
-# CONFIG / SECRETS
+# SECRETS / CONFIG
 # =============================
-def get_secret(key: str) -> str | None:
-    """Lê do Streamlit Cloud (st.secrets) e cai para env local."""
+def get_secret(key):
     try:
         return st.secrets[key]
     except Exception:
@@ -26,8 +29,6 @@ def get_secret(key: str) -> str | None:
 C6_USERNAME = get_secret("C6_USERNAME")
 C6_PASSWORD = get_secret("C6_PASSWORD")
 
-# Permite trocar ambiente (quando você tiver a URL de homolog)
-# Por padrão fica no PROD do manual.
 BASE_URL = (
     get_secret("C6_BASE_URL")
     or "https://marketplace-proposal-service-api-p.c6bank.info"
@@ -37,57 +38,56 @@ BASE_URL = (
 # =============================
 # FUNÇÕES DE API
 # =============================
-def c6_get_token(username: str, password: str) -> str:
-    """
-    Autenticação conforme manual:
-    POST {BASE_URL}/auth/token
-    Content-Type: application/x-www-form-urlencoded
-    Body: username, password
-    Retorno: access_token
-    """
+def c6_get_token(username, password):
     url = f"{BASE_URL}/auth/token"
 
     resp = requests.post(
         url,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        data={"username": username, "password": password},
-        timeout=30,
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        data={
+            "username": username,
+            "password": password
+        },
+        timeout=30
     )
 
     if resp.status_code != 200:
         raise RuntimeError(
-            f"AUTH_FAIL HTTP {resp.status_code}\n{resp.text}"
+            f"AUTH ERROR HTTP {resp.status_code}\n{resp.text}"
         )
 
     data = resp.json()
     token = data.get("access_token")
+
     if not token:
-        raise RuntimeError(f"AUTH_NO_TOKEN\n{resp.text}")
+        raise RuntimeError(f"TOKEN AUSENTE\n{resp.text}")
 
     return token
 
 
-def c6_generate_liveness(token: str, nome: str, cpf: str, nascimento_yyyy_mm_dd: str, telefone: str | None):
-    """
-    Gera link de autorização (liveness)
-    POST {BASE_URL}/marketplace/authorization/generate-liveness
-    Header: access_token: <token>  (sem Bearer)
-    """
+def c6_generate_liveness(token, nome, cpf, nascimento, telefone=None):
     url = f"{BASE_URL}/marketplace/authorization/generate-liveness"
 
     payload = {
         "nome": nome,
         "cpf": cpf,
-        "data_nascimento": nascimento_yyyy_mm_dd,
+        "data_nascimento": nascimento
     }
+
     if telefone:
         payload["telefone"] = telefone
 
     resp = requests.post(
         url,
-        headers={"access_token": token, "Content-Type": "application/json"},
+        headers={
+            "Authorization": f"Bearer {token}",
+            "access_token": token,
+            "Content-Type": "application/json"
+        },
         json=payload,
-        timeout=30,
+        timeout=30
     )
 
     return resp
@@ -103,9 +103,10 @@ with st.form("form_autorizacao"):
         "Data de nascimento",
         format="DD/MM/YYYY",
         min_value=date(1900, 1, 1),
-        max_value=date.today(),
+        max_value=date.today()
     )
     telefone = st.text_input("Telefone (opcional)")
+
     submit = st.form_submit_button("🚀 Gerar link")
 
 
@@ -113,23 +114,18 @@ with st.form("form_autorizacao"):
 # SUBMIT
 # =============================
 if submit:
-    # validações simples
-    if not (nome and cpf and nascimento):
+    if not nome or not cpf or not nascimento:
         st.error("Preencha todos os campos obrigatórios")
         st.stop()
 
-    if not (C6_USERNAME and C6_PASSWORD):
-        st.error("Credenciais C6 não configuradas (Secrets: C6_USERNAME e C6_PASSWORD)")
+    if not C6_USERNAME or not C6_PASSWORD:
+        st.error("Credenciais C6 não configuradas no servidor")
         st.stop()
 
-    # Normaliza telefone (opcional)
-    tel = telefone.strip() if telefone else ""
-    tel = tel if tel else None
-
-    # Data no padrão exigido pela API
     nascimento_api = nascimento.strftime("%Y-%m-%d")
+    telefone_api = telefone.strip() if telefone.strip() else None
 
-    # 1) Token
+    # 1) TOKEN
     try:
         with st.spinner("Autenticando na API C6..."):
             token = c6_get_token(C6_USERNAME, C6_PASSWORD)
@@ -138,17 +134,24 @@ if submit:
         st.code(str(e))
         st.stop()
 
-    # 2) Geração do link
+    # 2) GERAR LINK
     with st.spinner("Gerando link de autorização..."):
-        res = c6_generate_liveness(token, nome, cpf, nascimento_api, tel)
+        res = c6_generate_liveness(
+            token,
+            nome,
+            cpf,
+            nascimento_api,
+            telefone_api
+        )
 
     if res.status_code == 200:
         data = res.json()
         st.success("Link gerado com sucesso!")
         st.code(data.get("link", ""), language="text")
+
         if data.get("data_expiracao"):
             st.caption(f"⏰ Expira em: {data['data_expiracao']}")
     else:
         st.error(f"Erro ao gerar link (HTTP {res.status_code})")
         st.code(res.text)
-        st.caption(f"BASE_URL usado: {BASE_URL}")
+        st.caption(f"BASE_URL usada: {BASE_URL}")
