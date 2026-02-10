@@ -39,6 +39,12 @@ BASE_URL = (
 # FUNÇÕES DE API
 # =============================
 def c6_get_token(username, password):
+    """
+    Manual:
+    POST {BASE_URL}/auth/token
+    Content-Type: application/x-www-form-urlencoded
+    Body: username, password
+    """
     url = f"{BASE_URL}/auth/token"
 
     resp = requests.post(
@@ -67,25 +73,62 @@ def c6_get_token(username, password):
     return token
 
 
-def c6_generate_liveness(token, nome, cpf, nascimento, telefone=None):
+def parse_phone(phone_digits):
+    """
+    Manual do generate-liveness indica telefone como objeto com DDD e número.
+    Se não conseguir inferir, retorna None (opcional).
+    """
+    if not phone_digits:
+        return None
+
+    digits = "".join(ch for ch in phone_digits if ch.isdigit())
+    if len(digits) < 10:
+        return None
+
+    ddd = digits[:2]
+    numero = digits[2:]
+    return {
+        "codigo_area": ddd,
+        "numero": numero
+    }
+
+
+def c6_generate_liveness(token, nome, cpf, nascimento_yyyy_mm_dd, telefone_obj=None):
+    """
+    Manual:
+    POST {BASE_URL}/marketplace/authorization/generate-liveness
+    Headers:
+      Accept: application/vnd.c6bank_authorization_generate_liveness_v1+json
+      Content-Type: application/json
+      Authorization: Token de autenticação obtido previamente (token cru, sem Bearer)
+    E a seção de autenticação cita header access_token (sem Bearer).
+    """
     url = f"{BASE_URL}/marketplace/authorization/generate-liveness"
 
     payload = {
         "nome": nome,
         "cpf": cpf,
-        "data_nascimento": nascimento
+        "data_nascimento": nascimento_yyyy_mm_dd
     }
 
-    if telefone:
-        payload["telefone"] = telefone
+    if telefone_obj:
+        payload["telefone"] = telefone_obj
+
+    headers = {
+        "Accept": "application/vnd.c6bank_authorization_generate_liveness_v1+json",
+        "Content-Type": "application/json",
+
+        # MUITO IMPORTANTE:
+        # token CRU no Authorization (sem Bearer)
+        "Authorization": token,
+
+        # e também no access_token (como a seção de autenticação menciona)
+        "access_token": token
+    }
 
     resp = requests.post(
         url,
-        headers={
-            "Authorization": f"Bearer {token}",
-            "access_token": token,
-            "Content-Type": "application/json"
-        },
+        headers=headers,
         json=payload,
         timeout=30
     )
@@ -123,7 +166,7 @@ if submit:
         st.stop()
 
     nascimento_api = nascimento.strftime("%Y-%m-%d")
-    telefone_api = telefone.strip() if telefone.strip() else None
+    telefone_obj = parse_phone(telefone)
 
     # 1) TOKEN
     try:
@@ -132,16 +175,21 @@ if submit:
     except Exception as e:
         st.error("Erro ao autenticar na API C6")
         st.code(str(e))
+        st.caption(f"BASE_URL usada: {BASE_URL}")
         st.stop()
+
+    # Diagnóstico leve (sem expor token inteiro)
+    is_jwt = (token.count(".") == 2)
+    st.caption(f"Token parece JWT? {'SIM' if is_jwt else 'NÃO'}")
 
     # 2) GERAR LINK
     with st.spinner("Gerando link de autorização..."):
         res = c6_generate_liveness(
-            token,
-            nome,
-            cpf,
-            nascimento_api,
-            telefone_api
+            token=token,
+            nome=nome,
+            cpf=cpf,
+            nascimento_yyyy_mm_dd=nascimento_api,
+            telefone_obj=telefone_obj
         )
 
     if res.status_code == 200:
